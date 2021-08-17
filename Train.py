@@ -21,7 +21,7 @@ import math
 from collections import OrderedDict
 import copy
 import time
-from model.utils import DataLoader
+from model.utils import CustomDataset, DataLoader, VideoDataLoader
 from model.base_model import *
 from sklearn.metrics import roc_auc_score
 from utils import *
@@ -31,11 +31,13 @@ import argparse
 import warnings
 warnings.filterwarnings("ignore") 
 
+from torch.utils.tensorboard import SummaryWriter
+
 parser = argparse.ArgumentParser(description="MPN")
 parser.add_argument('--gpus', nargs='+', type=str, help='gpus')
 parser.add_argument('--batch_size', type=int, default=4, help='batch size for training')
 parser.add_argument('--test_batch_size', type=int, default=1, help='batch size for test')
-parser.add_argument('--epochs', type=int, default=1000, help='number of epochs for training')
+parser.add_argument('--epochs', type=int, default=60, help='number of epochs for training')
 parser.add_argument('--loss_fra_reconstruct', type=float, default=1.00, help='weight of the frame reconstruction loss')
 parser.add_argument('--loss_fea_reconstruct', type=float, default=1.00, help='weight of the feature reconstruction loss')
 parser.add_argument('--loss_distinguish', type=float, default=0.0001, help='weight of the feature distinction loss')
@@ -49,8 +51,8 @@ parser.add_argument('--fdim', type=list, default=[128], help='channel dimension 
 parser.add_argument('--pdim', type=list, default=[128], help='channel dimension of the prototypes')
 parser.add_argument('--psize', type=int, default=10, help='number of the prototype items')
 parser.add_argument('--alpha', type=float, default=0.6, help='weight for the anomality score')
-parser.add_argument('--num_workers', type=int, default=8, help='number of workers for the train loader')
-parser.add_argument('--num_workers_test', type=int, default=8, help='number of workers for the test loader')
+parser.add_argument('--num_workers', type=int, default=2, help='number of workers for the train loader')
+parser.add_argument('--num_workers_test', type=int, default=1, help='number of workers for the test loader')
 parser.add_argument('--dataset_type', type=str, default='ped2', help='type of dataset: ped2, avenue, shanghai')
 parser.add_argument('--dataset_path', type=str, default='.data/', help='directory of data')
 parser.add_argument('--exp_dir', type=str, default='log', help='directory of log')
@@ -69,18 +71,30 @@ else:
 
 torch.backends.cudnn.enabled = True # make sure to use cudnn for computational performance
 
-train_folder = args.dataset_path+args.dataset_type+"/training/frames"
+train_folder = os.path.join(args.dataset_path, args.dataset_type, "training/frames")
 
 # Loading dataset
-train_dataset = VideoDataLoader(train_folder, args.dataset_type, transforms.Compose([
-             transforms.ToTensor(),           
-             ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1, segs=args.segs, batch_size=args.batch_size)
-
+if args.dataset_type.startswith("mt"):
+  train_dataset = CustomDataset(
+      train_folder,
+      transforms.Compose(
+          [
+              transforms.ToTensor(),
+          ]
+      ),
+      resize_height=args.h,
+      resize_width=args.w,
+      time_step=args.t_length - 1
+  )
+else:
+  train_dataset = VideoDataLoader(train_folder, args.dataset_type, transforms.Compose([
+              transforms.ToTensor(),           
+              ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1, segs=args.segs, batch_size=args.batch_size)
 
 train_size = len(train_dataset)
 
-train_batch = data.DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=args.num_workers, drop_last=True)
-
+# train_batch = data.DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=args.num_workers, drop_last=True)
+train_batch = data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, drop_last=True)
 
 # Model setting
 model = convAE(args.c, args.t_length, args.psize, args.fdim[0], args.pdim[0])
@@ -95,8 +109,6 @@ params_D =  params_encoder+params_decoder+params_output+params_proto
 
 optimizer_D = torch.optim.Adam(params_D, lr=args.lr_D)
 
-
-
 start_epoch = 0
 if os.path.exists(args.resume):
   print('Resume model from '+ args.resume)
@@ -106,7 +118,6 @@ if os.path.exists(args.resume):
   model.load_state_dict(checkpoint['state_dict'].state_dict())
   optimizer_D.load_state_dict(checkpoint['optimizer_D'])
 
-
 if len(args.gpus[0])>1:
   model = nn.DataParallel(model)
 
@@ -114,11 +125,14 @@ if len(args.gpus[0])>1:
 log_dir = os.path.join('./exp', args.dataset_type, args.exp_dir)
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
+writer = SummaryWriter(log_dir)
 
-if not args.debug:
-  orig_stdout = sys.stdout
-  f = open(os.path.join(log_dir, 'log.txt'),'w')
-  sys.stdout= f
+f = open(os.path.join(log_dir, 'log.txt'),'w')
+
+# if not args.debug:
+#   orig_stdout = sys.stdout
+#   f = open(os.path.join(log_dir, 'log.txt'),'w')
+#   sys.stdout= f
 
 loss_func_mse = nn.MSELoss(reduction='none')
 loss_pix = AverageMeter()
@@ -126,14 +140,13 @@ loss_fea = AverageMeter()
 loss_dis = AverageMeter()
 # Training
 
-
 model.train()
 
 for epoch in range(start_epoch, args.epochs):
     labels_list = []
     
     pbar = tqdm(total=len(train_batch))
-    for j,(imgs) in enumerate(train_batch):
+    for j,(imgs, _) in enumerate(train_batch):
         imgs = Variable(imgs).cuda()
         imgs = imgs.view(args.batch_size,-1,imgs.shape[-2],imgs.shape[-1])
 
@@ -143,7 +156,7 @@ for epoch in range(start_epoch, args.epochs):
         fea_loss = fea_loss.mean()
         dis_loss = dis_loss.mean()
         loss_D = args.loss_fra_reconstruct*loss_pixel + args.loss_fea_reconstruct * fea_loss + args.loss_distinguish * dis_loss 
-        loss_D.backward(retain_graph=True)
+        loss_D.backward(retain_graph=False)
         optimizer_D.step()
 
 
@@ -164,8 +177,11 @@ for epoch in range(start_epoch, args.epochs):
     print('Epoch:', epoch+1)
     print('Lr: {:.6f}'.format(optimizer_D.param_groups[-1]['lr']))
     print('PRe: {:.6f}({:.4f})'.format(loss_pixel.item(), loss_pix.avg))
+    writer.add_scalar("Loss/Frame-Reconstruction", loss_pixel.item(), epoch + 1)
     print('FRe: {:.6f}({:.4f})'.format(fea_loss.item(), loss_fea.avg))
+    writer.add_scalar("Loss/Feature-Reconstruction", fea_loss.item(), epoch + 1)
     print('Dist: {:.6f}({:.4f})'.format(dis_loss.item(), loss_dis.avg))
+    writer.add_scalar("Loss/Distinction", fea_loss.item(), epoch + 1)
     print('----------------------------------------')   
 
     pbar.close()
@@ -192,5 +208,8 @@ for epoch in range(start_epoch, args.epochs):
     
 print('Training is finished')
 if not args.debug:
-  sys.stdout = orig_stdout
+  # sys.stdout = orig_stdout
   f.close()
+
+writer.flush()
+writer.close()
