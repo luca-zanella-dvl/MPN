@@ -207,6 +207,19 @@ for epoch in range(start_epoch, args.epochs):
 
     
 print('Training is finished')
+if len(args.gpus[0])>1:
+  model_save = model.module
+else:
+  model_save = model
+  
+state = {
+      'epoch': epoch,
+      'state_dict': model_save,
+      'optimizer_D' : optimizer_D.state_dict(),
+    }
+# Save the model
+torch.save(state, os.path.join(log_dir, 'model_'+str(epoch)+'.pth'))
+
 if not args.debug:
   # sys.stdout = orig_stdout
   f.close()
