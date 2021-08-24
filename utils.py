@@ -1,3 +1,4 @@
+from pathlib import Path
 import numpy as np
 import os
 import sys
@@ -229,3 +230,57 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
+
+
+def visualize_frame_with_text(f_name, score, output_dir="output"):
+    filename, file_extension = os.path.splitext(f_name)
+    f_idx = int(filename.split("/")[-1])
+
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    output_path = os.path.join(output_dir, f"{f_idx:04}{file_extension}")
+
+    frame = cv2.imread(f_name)
+
+    if score >= 0:
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.5
+        threshold = 0.5
+        bgr_red = (0, 0, 255)
+        bgr_green = (0, 255, 0)
+        # font_color = bgr_red if score > threshold else bgr_green
+        line_type = 2
+
+        ano_description = "Anomaly" if score < threshold else "Normal"
+        font_color = bgr_red if ano_description == "Anomaly" else bgr_green
+        
+        height, _, _ = frame.shape
+        margin = 10
+        bottom_left_corner_of_text = (margin, height - margin)
+
+        cv2.putText(
+            frame,
+            f"{score:.2f}",
+            bottom_left_corner_of_text,
+            font,
+            font_scale,
+            font_color,
+            line_type,
+        )
+
+        text_width, text_height = cv2.getTextSize("{:.2f}".format(score), font, font_scale, line_type)[0]
+        ano_corner = (margin * 2 + text_width, height - margin)
+
+        cv2.putText(
+            frame,
+            ano_description,
+            ano_corner,
+            font,
+            font_scale,
+            font_color,
+            line_type,
+        )
+
+    # Display the image
+    # cv2.imshow("frame", frame)
+    cv2.imwrite(output_path, frame)
+    cv2.waitKey(0)
