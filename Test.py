@@ -88,9 +88,9 @@ loss_func_mse = nn.MSELoss(reduction='none')
 model = convAE(args.c, args.t_length, args.psize, args.fdim[0], args.pdim[0])
 model.cuda()
 
-dataset_type = args.dataset_type if args.dataset_type != 'SHTech' else 'shanghai'
+dataset_type = args.dataset_type if args.dataset_type != 'shanghaitech' else 'shanghai'
 labels = np.load('./data/frame_labels_'+dataset_type+'.npy')
-if 'SHTech' in args.dataset_type or 'ped1' in args.dataset_type:
+if 'shanghaitech' in args.dataset_type or 'ped1' in args.dataset_type:
     labels = np.expand_dims(labels, 0)
 
 videos = OrderedDict()
@@ -159,12 +159,14 @@ for video in sorted(videos_list):
 pbar = tqdm(total=len(test_batch),
             bar_format='{l_bar}|{bar}| {n_fmt}/{total_fmt} [{rate_fmt}{postfix}|{elapsed}<{remaining}]',)
 with torch.no_grad():
-    for k,(imgs) in enumerate(test_batch):
+    for k,(imgs, frame_name) in enumerate(test_batch):
         hidden_state = None
         imgs = Variable(imgs).cuda()
-        
+        frame_name = frame_name[0]
+
         start_t = time.time()
-        outputs, feas, _, _, _, fea_loss = model.forward(imgs[:,:3*4], update_weights, False)
+        #outputs, feas, _, _, _, fea_loss = model.forward(imgs[:,:3*4], update_weights, False)
+        outputs, fea_loss = model.forward(imgs[:, : 3 * 4], update_weights, False)
         end_t = time.time()
         
         if k>=len(test_batch)//2:
