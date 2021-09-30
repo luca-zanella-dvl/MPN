@@ -130,8 +130,8 @@ for video in sorted(videos_list):
     feature_distance_list[video_name] = []
 
 
-if not os.path.isdir(psnr_dir):
-    os.mkdir(psnr_dir)
+#if not os.path.isdir(psnr_dir):
+#    os.mkdir(psnr_dir)
 
 ckpt = snapshot_path
 ckpt_name = ckpt.split('_')[-1]
