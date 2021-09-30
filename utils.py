@@ -234,10 +234,12 @@ class AverageMeter(object):
 
 def visualize_frame_with_text(f_name, score, output_dir="output"):
     filename, file_extension = os.path.splitext(f_name)
-    f_idx = int(filename.split("/")[-1])
+    #f_idx = int(filename.split("/")[-1]) 
+    f_idx= int(f_name.split("/")[-1].split(".")[-2])
+    
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
-    output_path = os.path.join(output_dir, f"{f_idx:04}{file_extension}")
+    output_path = os.path.join(output_dir, f"{f_idx:06}{file_extension}")
 
     frame = cv2.imread(f_name)
 
@@ -283,4 +285,29 @@ def visualize_frame_with_text(f_name, score, output_dir="output"):
     # Display the image
     # cv2.imshow("frame", frame)
     cv2.imwrite(output_path, frame)
+    cv2.waitKey(0)
+
+
+def visualize_pred_err(f_name, pred_err, resize_width, resize_height, output_dir="output"):
+    filename, file_extension = os.path.splitext(f_name)
+    #f_idx = int(filename.split("/")[-1])
+    f_idx = int(f_name.split("/")[-1].split(".")[-2])
+    
+    
+
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    output_path = os.path.join(output_dir, f"{f_idx:06}{file_extension}")
+
+    img = cv2.imread(f_name)
+    img_resized = cv2.resize(img, (resize_width, resize_height))
+    
+
+    heatmap_img = cv2.applyColorMap(pred_err, cv2.COLORMAP_JET)
+    
+    
+    fin = cv2.addWeighted(heatmap_img, 0.7, img_resized, 0.3, 0)
+   
+    # Display the image
+    #cv2.imshow("frame", fin)
+    cv2.imwrite(output_path, fin)
     cv2.waitKey(0)
