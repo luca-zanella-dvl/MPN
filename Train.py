@@ -181,7 +181,7 @@ for epoch in range(start_epoch, args.epochs):
     print('FRe: {:.6f}({:.4f})'.format(fea_loss.item(), loss_fea.avg))
     writer.add_scalar("Loss/Feature-Reconstruction", fea_loss.item(), epoch + 1)
     print('Dist: {:.6f}({:.4f})'.format(dis_loss.item(), loss_dis.avg))
-    writer.add_scalar("Loss/Distinction", fea_loss.item(), epoch + 1)
+    writer.add_scalar("Loss/Distinction", dis_loss.item(), epoch + 1)
     print('----------------------------------------')   
 
     pbar.close()
