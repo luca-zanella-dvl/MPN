@@ -68,6 +68,7 @@ class DataLoader(data.Dataset):
             # if 'ped2' in self.dir and '12' not in video:
             #     continue
             video_name = video.split("/")[-1]
+            #for i in range(len(self.videos[video_name]["frame"]) - self._time_step-self._num_pred):
             for i in range(len(self.videos[video_name]["frame"]) - self._time_step):
                 frames.append(self.videos[video_name]["frame"][i])
 
@@ -87,7 +88,7 @@ class DataLoader(data.Dataset):
             if self.transform is not None:
                 batch.append(self.transform(image))
 
-        return np.concatenate(batch, axis=0)
+        return np.concatenate(batch, axis=0), self.samples[index]
 
     def __len__(self):
         return len(self.samples)
@@ -177,7 +178,7 @@ class VideoDataLoader(data.Dataset):
                 )
                 if self.transform is not None:
                     batch.append(self.transform(image))
-        return np.concatenate(batch, axis=0)
+        return np.concatenate(batch, axis=0) , self.samples[index]
 
     def __len__(self):
         return len(self.video_names)
