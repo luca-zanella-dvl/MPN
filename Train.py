@@ -71,10 +71,11 @@ else:
 
 torch.backends.cudnn.enabled = True # make sure to use cudnn for computational performance
 
-train_folder = os.path.join(args.dataset_path, args.dataset_type, "training/frames")
+
 
 # Loading dataset
 if args.dataset_type.startswith("mt"):
+  train_folder = os.path.join(args.dataset_path, args.dataset_type, "training/frames")
   train_dataset = CustomDataset(
       train_folder,
       transforms.Compose(
@@ -87,13 +88,14 @@ if args.dataset_type.startswith("mt"):
       time_step=args.t_length - 1
   )
 else:
-  train_dataset = VideoDataLoader(train_folder, args.dataset_type, transforms.Compose([
+  train_folder = os.path.join(args.dataset_path, args.dataset_type, "training/videos")
+  train_dataset = DataLoader(train_folder, transforms.Compose([
               transforms.ToTensor(),           
-              ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1, segs=args.segs, batch_size=args.batch_size)
+              ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1)
 
 train_size = len(train_dataset)
 
-# train_batch = data.DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=args.num_workers, drop_last=True)
+#train_batch = data.DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=args.num_workers, drop_last=True)
 train_batch = data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, drop_last=True)
 
 # Model setting
@@ -146,7 +148,7 @@ for epoch in range(start_epoch, args.epochs):
     labels_list = []
     
     pbar = tqdm(total=len(train_batch))
-    for j,(imgs, _) in enumerate(train_batch):
+    for j,(imgs,_) in enumerate(train_batch):
         imgs = Variable(imgs).cuda()
         imgs = imgs.view(args.batch_size,-1,imgs.shape[-2],imgs.shape[-1])
 
@@ -160,9 +162,9 @@ for epoch in range(start_epoch, args.epochs):
         optimizer_D.step()
 
 
-        loss_pix.update(args.loss_fra_reconstruct*loss_pixel.item(), 1)
-        loss_fea.update(args.loss_fea_reconstruct*fea_loss.item(), 1)
-        loss_dis.update(args.loss_distinguish*dis_loss.item(), 1)
+        loss_pix.update(args.loss_fra_reconstruct*loss_pixel.item(),  args.batch_size)
+        loss_fea.update(args.loss_fea_reconstruct*fea_loss.item(),  args.batch_size)
+        loss_dis.update(args.loss_distinguish*dis_loss.item(),  args.batch_size)
 
         pbar.set_postfix({
                       'Epoch': '{0} {1}'.format(epoch+1, args.exp_dir),
