@@ -343,7 +343,7 @@ class CustomDataset(data.Dataset):
             filename, file_extension = os.path.splitext(img_file)
             frame_name = int(filename.split("/")[-1])
             succ_frames = [
-                os.path.join(self.dir, f"{frame_name + j:04}" + file_extension)
+                os.path.join(self.dir, f"{frame_name + j:06}" + file_extension)
                 for j in range(self._time_step + self._num_pred)
             ]
             if all(os.path.isfile(succ_frame) for succ_frame in succ_frames):
@@ -356,7 +356,7 @@ class CustomDataset(data.Dataset):
 
         batch = []
         for i in range(self._time_step + self._num_pred):
-            image_name = os.path.join(self.dir, f"{frame_name + i:04}" + file_extension)
+            image_name = os.path.join(self.dir, f"{frame_name + i:06}" + file_extension)
             image = np_load_frame(image_name, self._resize_height, self._resize_width)
             if self.transform is not None:
                 batch.append(self.transform(image))
