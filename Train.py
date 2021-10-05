@@ -33,6 +33,9 @@ warnings.filterwarnings("ignore")
 
 from torch.utils.tensorboard import SummaryWriter
 
+import wandb
+#wandb.init(project="piazza-fiera-1")
+
 parser = argparse.ArgumentParser(description="MPN")
 parser.add_argument('--gpus', nargs='+', type=str, help='gpus')
 parser.add_argument('--batch_size', type=int, default=4, help='batch size for training')
@@ -88,15 +91,25 @@ if args.dataset_type.startswith("mt"):
       time_step=args.t_length - 1
   )
 else:
-  train_folder = os.path.join(args.dataset_path, args.dataset_type, "training/videos")
+  train_folder = os.path.join(args.dataset_path, args.dataset_type, "training/frames")
   train_dataset = DataLoader(train_folder, transforms.Compose([
+              transforms.ToTensor(),           
+              ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1)
+  
+  val_folder = os.path.join(args.dataset_path, args.dataset_type, "validation/frames")
+  val_dataset = DataLoader(val_folder, transforms.Compose([
               transforms.ToTensor(),           
               ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1)
 
 train_size = len(train_dataset)
+val_size =len(val_dataset)
+
+
 
 #train_batch = data.DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=args.num_workers, drop_last=True)
 train_batch = data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, drop_last=True)
+
+val_batch = data.DataLoader(val_dataset, batch_size=args.test_batch_size, shuffle=True, num_workers=args.num_workers, drop_last=True)
 
 # Model setting
 model = convAE(args.c, args.t_length, args.psize, args.fdim[0], args.pdim[0])
@@ -140,13 +153,18 @@ loss_func_mse = nn.MSELoss(reduction='none')
 loss_pix = AverageMeter()
 loss_fea = AverageMeter()
 loss_dis = AverageMeter()
+
+loss_pix_v = AverageMeter()
+loss_fea_v = AverageMeter()
+loss_dis_v = AverageMeter()
+
 # Training
 
 model.train()
 
 for epoch in range(start_epoch, args.epochs):
     labels_list = []
-    
+    model.train() 
     pbar = tqdm(total=len(train_batch))
     for j,(imgs,_) in enumerate(train_batch):
         imgs = Variable(imgs).cuda()
@@ -185,15 +203,57 @@ for epoch in range(start_epoch, args.epochs):
     print('Dist: {:.6f}({:.4f})'.format(dis_loss.item(), loss_dis.avg))
     writer.add_scalar("Loss/Distinction", dis_loss.item(), epoch + 1)
     print('----------------------------------------')   
-
-    pbar.close()
-
+    
     loss_pix.reset()
     loss_fea.reset()
     loss_dis.reset()
+    
+    pbar.close()  
 
+    # Validation 
+    model.eval()
+    for k,(imgs,_) in enumerate(val_batch):
+        imgs = Variable(imgs).cuda()
+        outputs, _, _, _, fea_loss_v, _, dis_loss_v = model.forward(imgs[:,0:12], None, True)
+        
+        loss_pixel_v = torch.mean(loss_func_mse(outputs, imgs[:,12:]))
+        fea_loss_v = fea_loss_v.mean()
+        dis_loss_v = dis_loss_v.mean()
+        
+        loss_pix_v.update(args.loss_fra_reconstruct*loss_pixel_v.item(),  args.batch_size)
+        loss_fea_v.update(args.loss_fea_reconstruct*fea_loss_v.item(),  args.batch_size)
+        loss_dis_v.update(args.loss_distinguish*dis_loss_v.item(),  args.batch_size)
+    
+    print('----------------------------------------')
+    print('Epoch:', epoch+1)
+    print('PRe: {:.6f}({:.4f})'.format(loss_pixel_v.item(), loss_pix_v.avg))
+    writer.add_scalar("Loss/Frame-Reconstruction_V", loss_pixel_v.item(), epoch + 1)
+    print('FRe: {:.6f}({:.4f})'.format(fea_loss_v.item(), loss_fea_v.avg))
+    writer.add_scalar("Loss/Feature-Reconstruction_V", fea_loss_v.item(), epoch + 1)
+    print('Dist: {:.6f}({:.4f})'.format(dis_loss_v.item(), loss_dis_v.avg))
+    writer.add_scalar("Loss/Distinction_V", dis_loss_v.item(), epoch + 1)
+    print('----------------------------------------')   
+    
+    #wandb.log({"Loss/Distinction": dis_loss.item()})
+    #wandb.log({"Loss/Feature-Reconstruction": fea_loss.item()})
+    #wandb.log({"Loss/Frame-Reconstruction": loss_pixel.item()})
+    #wandb.log({"Loss/Distinction_V": dis_loss_v.item()})
+    #wandb.log({"Loss/Feature-Reconstruction_V": fea_loss_v.item()})
+    #wandb.log({"Loss/Frame-Reconstruction_V": loss_pixel_v.item()})
+   
+    
+    
+    loss_pix_v.reset()
+    loss_fea_v.reset()
+    loss_dis_v.reset()
+    
+    
+        
+    
+    
+    
     # Save the model
-    if epoch%100==0:
+    if epoch%10==0:
       
       if len(args.gpus[0])>1:
         model_save = model.module
@@ -226,5 +286,6 @@ if not args.debug:
   # sys.stdout = orig_stdout
   f.close()
 
+#wandb.finish()
 writer.flush()
 writer.close()
