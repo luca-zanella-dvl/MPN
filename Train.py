@@ -34,7 +34,7 @@ warnings.filterwarnings("ignore")
 from torch.utils.tensorboard import SummaryWriter
 
 import wandb
-#wandb.init(project="piazza-fiera-1")
+wandb.init(project="piazza-2-sett-3.3")
 
 parser = argparse.ArgumentParser(description="MPN")
 parser.add_argument('--gpus', nargs='+', type=str, help='gpus')
@@ -180,69 +180,72 @@ for epoch in range(start_epoch, args.epochs):
         optimizer_D.step()
 
 
-        loss_pix.update(args.loss_fra_reconstruct*loss_pixel.item(),  args.batch_size)
-        loss_fea.update(args.loss_fea_reconstruct*fea_loss.item(),  args.batch_size)
-        loss_dis.update(args.loss_distinguish*dis_loss.item(),  args.batch_size)
+        loss_pix.update(args.loss_fra_reconstruct*loss_pixel.item(),  1)
+        loss_fea.update(args.loss_fea_reconstruct*fea_loss.item(),  1)
+        loss_dis.update(args.loss_distinguish*dis_loss.item(),  1)
 
         pbar.set_postfix({
                       'Epoch': '{0} {1}'.format(epoch+1, args.exp_dir),
                       'Lr': '{:.6f}'.format(optimizer_D.param_groups[-1]['lr']),
-                      'PRe': '{:.6f}({:.4f})'.format(loss_pixel.item(), loss_pix.avg),
-                      'FRe': '{:.6f}({:.4f})'.format(fea_loss.item(), loss_fea.avg),
-                      'Dist': '{:.6f}({:.4f})'.format(dis_loss.item(), loss_dis.avg),
+                      'PRe': '{:.6f}({:.6f})'.format(loss_pixel.item(), loss_pix.avg),
+                      'FRe': '{:.6f}({:.6f})'.format(fea_loss.item(), loss_fea.avg),
+                      'Dist': '{:.6f}({:.6f})'.format(dis_loss.item(), loss_dis.avg),
                     })
         pbar.update(1)
 
     print('----------------------------------------')
     print('Epoch:', epoch+1)
     print('Lr: {:.6f}'.format(optimizer_D.param_groups[-1]['lr']))
-    print('PRe: {:.6f}({:.4f})'.format(loss_pixel.item(), loss_pix.avg))
-    writer.add_scalar("Loss/Frame-Reconstruction", loss_pixel.item(), epoch + 1)
-    print('FRe: {:.6f}({:.4f})'.format(fea_loss.item(), loss_fea.avg))
-    writer.add_scalar("Loss/Feature-Reconstruction", fea_loss.item(), epoch + 1)
-    print('Dist: {:.6f}({:.4f})'.format(dis_loss.item(), loss_dis.avg))
-    writer.add_scalar("Loss/Distinction", dis_loss.item(), epoch + 1)
+    print('PRe: {:.6f}({:.6f})'.format(loss_pixel.item(), loss_pix.avg))
+    writer.add_scalar("Loss/Frame-Reconstruction", loss_pix.avg , epoch + 1)
+    print('FRe: {:.6f}({:.6f})'.format(fea_loss.item(), loss_fea.avg))
+    writer.add_scalar("Loss/Feature-Reconstruction", loss_fea.avg , epoch + 1)
+    print('Dist: {:.6f}({:.6f})'.format(dis_loss.item(), loss_dis.avg))
+    writer.add_scalar("Loss/Distinction", loss_dis.avg , epoch + 1)
     print('----------------------------------------')   
     
-    loss_pix.reset()
-    loss_fea.reset()
-    loss_dis.reset()
+    
     
     pbar.close()  
 
     # Validation 
     model.eval()
-    for k,(imgs,_) in enumerate(val_batch):
-        imgs = Variable(imgs).cuda()
-        outputs, _, _, _, fea_loss_v, _, dis_loss_v = model.forward(imgs[:,0:12], None, True)
-        
-        loss_pixel_v = torch.mean(loss_func_mse(outputs, imgs[:,12:]))
-        fea_loss_v = fea_loss_v.mean()
-        dis_loss_v = dis_loss_v.mean()
-        
-        loss_pix_v.update(args.loss_fra_reconstruct*loss_pixel_v.item(),  args.batch_size)
-        loss_fea_v.update(args.loss_fea_reconstruct*fea_loss_v.item(),  args.batch_size)
-        loss_dis_v.update(args.loss_distinguish*dis_loss_v.item(),  args.batch_size)
+    with torch.no_grad():
+      for k,(imgs,_) in enumerate(val_batch):
+          imgs = Variable(imgs).cuda()
+          outputs, _, _, _, fea_loss_v, _, dis_loss_v = model.forward(imgs[:,0:12], None, True)
+
+          loss_pixel_v = torch.mean(loss_func_mse(outputs, imgs[:,12:]))
+          fea_loss_v = fea_loss_v.mean()
+          dis_loss_v = dis_loss_v.mean()
+
+          loss_pix_v.update(args.loss_fra_reconstruct*loss_pixel_v.item(),  1)
+          loss_fea_v.update(args.loss_fea_reconstruct*fea_loss_v.item(),  1)
+          loss_dis_v.update(args.loss_distinguish*dis_loss_v.item(),  1)
     
     print('----------------------------------------')
     print('Epoch:', epoch+1)
-    print('PRe: {:.6f}({:.4f})'.format(loss_pixel_v.item(), loss_pix_v.avg))
-    writer.add_scalar("Loss/Frame-Reconstruction_V", loss_pixel_v.item(), epoch + 1)
-    print('FRe: {:.6f}({:.4f})'.format(fea_loss_v.item(), loss_fea_v.avg))
-    writer.add_scalar("Loss/Feature-Reconstruction_V", fea_loss_v.item(), epoch + 1)
-    print('Dist: {:.6f}({:.4f})'.format(dis_loss_v.item(), loss_dis_v.avg))
-    writer.add_scalar("Loss/Distinction_V", dis_loss_v.item(), epoch + 1)
+    print('PRe: {:.6f}({:.6f})'.format(loss_pixel_v.item(), loss_pix_v.avg))
+    writer.add_scalar("Loss/Frame-Reconstruction_V", loss_pix_v.avg , epoch + 1)
+    print('FRe: {:.6f}({:.6f})'.format(fea_loss_v.item(), loss_fea_v.avg))
+    writer.add_scalar("Loss/Feature-Reconstruction_V", loss_fea_v.avg, epoch + 1)
+    print('Dist: {:.6f}({:.6f})'.format(dis_loss_v.item(), loss_dis_v.avg))
+    writer.add_scalar("Loss/Distinction_V", loss_dis_v.avg , epoch + 1)
     print('----------------------------------------')   
     
-    #wandb.log({"Loss/Distinction": dis_loss.item()})
-    #wandb.log({"Loss/Feature-Reconstruction": fea_loss.item()})
-    #wandb.log({"Loss/Frame-Reconstruction": loss_pixel.item()})
-    #wandb.log({"Loss/Distinction_V": dis_loss_v.item()})
-    #wandb.log({"Loss/Feature-Reconstruction_V": fea_loss_v.item()})
-    #wandb.log({"Loss/Frame-Reconstruction_V": loss_pixel_v.item()})
+    wandb.define_metric("epoch")
+    wandb.define_metric("Loss/*", step_metric="epoch")
+    wandb.log({"Loss/Distinction": loss_dis.avg , "epoch": epoch + 1})
+    wandb.log({"Loss/Feature-Reconstruction": loss_fea.avg, "epoch": epoch + 1})
+    wandb.log({"Loss/Frame-Reconstruction": loss_pix.avg, "epoch": epoch +1})
+    wandb.log({"Loss/Distinction_V": loss_dis_v.avg, "epoch": epoch +1})
+    wandb.log({"Loss/Feature-Reconstruction_V": loss_fea_v.avg, "epoch": epoch +1})
+    wandb.log({"Loss/Frame-Reconstruction_V": loss_pix_v.avg, "epoch": epoch +1})
    
     
-    
+    loss_pix.reset()
+    loss_fea.reset()
+    loss_dis.reset()
     loss_pix_v.reset()
     loss_fea_v.reset()
     loss_dis_v.reset()
@@ -286,6 +289,6 @@ if not args.debug:
   # sys.stdout = orig_stdout
   f.close()
 
-#wandb.finish()
+wandb.finish()
 writer.flush()
 writer.close()
