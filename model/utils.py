@@ -59,10 +59,12 @@ class DataLoader(data.Dataset):
             self.videos[video_name]["frame"] = glob.glob(os.path.join(video, "*.jpg"))
             self.videos[video_name]["frame"].sort()
             self.videos[video_name]["length"] = len(self.videos[video_name]["frame"])
+            self.videos[video_name]["min_frame"] = int(self.videos[video_name]["frame"][0].split("/")[-1].split(".")[-2])
 
     def get_all_samples(self):
         frames = []
         videos = glob.glob(os.path.join(self.dir, "*"))
+        print(os.path.join(self.dir, "*"))
         # videos = [videos[0]]
         for video in sorted(videos):
             # if 'ped2' in self.dir and '12' not in video:
@@ -78,6 +80,8 @@ class DataLoader(data.Dataset):
         video_name = self.samples[index].split("/")[-2]
         frame_name = int(self.samples[index].split("/")[-1].split(".")[-2])
 
+        frame_name -= self.videos[video_name]["min_frame"]
+
         batch = []
         for i in range(self._time_step + self._num_pred):
             image = np_load_frame(
@@ -88,7 +92,7 @@ class DataLoader(data.Dataset):
             if self.transform is not None:
                 batch.append(self.transform(image))
 
-        return np.concatenate(batch, axis=0), self.samples[index]
+        return np.concatenate(batch, axis=0), self.samples[index]  #added here 2nd term 
 
     def __len__(self):
         return len(self.samples)
@@ -131,7 +135,7 @@ class VideoDataLoader(data.Dataset):
                 self.video_names.append(name)
         else:
             videos = glob.glob(os.path.join(train_folder, "*"))
-
+            #print(videos)
             for video in sorted(videos):
                 video_name = video.split("/")[-1]
                 self.video_names.append(video_name)
@@ -156,7 +160,7 @@ class VideoDataLoader(data.Dataset):
             for i in range(len(self.videos[video_name]["frame"]) - self._time_step):
                 frames[video_name].append(self.videos[video_name]["frame"][i])
                 num += 1
-
+       
         return frames, num
 
     def __getitem__(self, index):
@@ -178,7 +182,8 @@ class VideoDataLoader(data.Dataset):
                 )
                 if self.transform is not None:
                     batch.append(self.transform(image))
-        return np.concatenate(batch, axis=0) , frame_name
+        
+        return np.concatenate(batch, axis=0)
 
     def __len__(self):
         return len(self.video_names)
@@ -219,6 +224,7 @@ class MetaDataLoader(data.Dataset):
         # import pdb;pdb.set_trace()
         if "UCF" in self.dir:
             videos = glob.glob(os.path.join(self.dir, "Nor*"))
+            print("HERE")
             for video in sorted(videos):
                 video_name = video.split("/")[-1]
                 self.video_names.append(video_name)
