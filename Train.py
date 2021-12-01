@@ -1,40 +1,23 @@
-import numpy as np
 import os
-import sys
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-import torchvision
-import torch.nn.init as init
 import torch.utils.data as data
-import torch.utils.data.dataset as dataset
-import torchvision.datasets as dset
 import torchvision.transforms as transforms
 from torch.autograd import Variable
-import torchvision.utils as v_utils
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import cv2
-import math
-from collections import OrderedDict
-import copy
-import time
-from model.utils import CustomDataset, DataLoader, VideoDataLoader
+from model.utils import DataLoader
 from model.base_model import *
-from sklearn.metrics import roc_auc_score
 from utils import *
-import random
 from tqdm import tqdm
 import argparse
 import warnings
+import wandb
+wandb.init(project="MPN")
 warnings.filterwarnings("ignore") 
 
-from torch.utils.tensorboard import SummaryWriter
 
-import wandb
-wandb.init(project="piazza-2-sett-3.3")
+
 
 parser = argparse.ArgumentParser(description="MPN")
 parser.add_argument('--gpus', nargs='+', type=str, help='gpus')
@@ -61,6 +44,7 @@ parser.add_argument('--dataset_path', type=str, default='.data/', help='director
 parser.add_argument('--exp_dir', type=str, default='log', help='directory of log')
 parser.add_argument('--resume', type=str, default='exp/ped2/example.pth', help='file path of resume pth')
 parser.add_argument('--debug', type=bool, default=False, help='if debug')
+parser.add_argument('--val', type=bool, default=False, help='if val')
 args = parser.parse_args()
 
 torch.manual_seed(2020)
@@ -75,41 +59,25 @@ else:
 torch.backends.cudnn.enabled = True # make sure to use cudnn for computational performance
 
 
-
 # Loading dataset
-if args.dataset_type.startswith("mt"):
-  train_folder = os.path.join(args.dataset_path, args.dataset_type, "training/frames")
-  train_dataset = CustomDataset(
-      train_folder,
-      transforms.Compose(
-          [
-              transforms.ToTensor(),
-          ]
-      ),
-      resize_height=args.h,
-      resize_width=args.w,
-      time_step=args.t_length - 1
-  )
-else:
-  train_folder = os.path.join(args.dataset_path, args.dataset_type, "training/frames")
-  train_dataset = DataLoader(train_folder, transforms.Compose([
-              transforms.ToTensor(),           
-              ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1)
-  
+train_folder = os.path.join(args.dataset_path, args.dataset_type, "training/frames")
+train_dataset = DataLoader(train_folder, transforms.Compose([
+            transforms.ToTensor(),           
+            ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1)
+train_batch = data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, drop_last=True)
+train_size = len(train_dataset)
+
+if args.val is True: 
   val_folder = os.path.join(args.dataset_path, args.dataset_type, "validation/frames")
   val_dataset = DataLoader(val_folder, transforms.Compose([
               transforms.ToTensor(),           
               ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1)
 
-train_size = len(train_dataset)
-val_size =len(val_dataset)
+  
+  val_size =len(val_dataset)
+  val_batch = data.DataLoader(val_dataset, batch_size=args.test_batch_size, shuffle=True, num_workers=args.num_workers, drop_last=True)
 
 
-
-#train_batch = data.DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=args.num_workers, drop_last=True)
-train_batch = data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, drop_last=True)
-
-val_batch = data.DataLoader(val_dataset, batch_size=args.test_batch_size, shuffle=True, num_workers=args.num_workers, drop_last=True)
 
 # Model setting
 model = convAE(args.c, args.t_length, args.psize, args.fdim[0], args.pdim[0])
@@ -119,7 +87,6 @@ params_encoder =  list(model.encoder.parameters())
 params_decoder = list(model.decoder.parameters())
 params_proto = list(model.prototype.parameters())
 params_output = list(model.ohead.parameters())
-# params = list(model.memory.parameters())
 params_D =  params_encoder+params_decoder+params_output+params_proto
 
 optimizer_D = torch.optim.Adam(params_D, lr=args.lr_D)
@@ -140,14 +107,13 @@ if len(args.gpus[0])>1:
 log_dir = os.path.join('./exp', args.dataset_type, args.exp_dir)
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
-writer = SummaryWriter(log_dir)
+    
+if not args.debug:
+  orig_stdout = sys.stdout
+  f = open(os.path.join(log_dir, 'log.txt'),'w')
+  sys.stdout= f
 
-f = open(os.path.join(log_dir, 'log.txt'),'w')
 
-# if not args.debug:
-#   orig_stdout = sys.stdout
-#   f = open(os.path.join(log_dir, 'log.txt'),'w')
-#   sys.stdout= f
 
 loss_func_mse = nn.MSELoss(reduction='none')
 loss_pix = AverageMeter()
@@ -197,11 +163,8 @@ for epoch in range(start_epoch, args.epochs):
     print('Epoch:', epoch+1)
     print('Lr: {:.6f}'.format(optimizer_D.param_groups[-1]['lr']))
     print('PRe: {:.6f}({:.6f})'.format(loss_pixel.item(), loss_pix.avg))
-    writer.add_scalar("Loss/Frame-Reconstruction", loss_pix.avg , epoch + 1)
     print('FRe: {:.6f}({:.6f})'.format(fea_loss.item(), loss_fea.avg))
-    writer.add_scalar("Loss/Feature-Reconstruction", loss_fea.avg , epoch + 1)
     print('Dist: {:.6f}({:.6f})'.format(dis_loss.item(), loss_dis.avg))
-    writer.add_scalar("Loss/Distinction", loss_dis.avg , epoch + 1)
     print('----------------------------------------')   
     
     
@@ -209,51 +172,48 @@ for epoch in range(start_epoch, args.epochs):
     pbar.close()  
 
     # Validation 
-    model.eval()
-    with torch.no_grad():
-      for k,(imgs,_) in enumerate(val_batch):
-          imgs = Variable(imgs).cuda()
-          outputs, _, _, _, fea_loss_v, _, dis_loss_v = model.forward(imgs[:,0:12], None, True)
+    if args.val is True: 
+      model.eval()
+      with torch.no_grad():
+        for k,(imgs,_) in enumerate(val_batch):
+            imgs = Variable(imgs).cuda()
+            outputs, _, _, _, fea_loss_v, _, dis_loss_v = model.forward(imgs[:,0:12], None, True)
 
-          loss_pixel_v = torch.mean(loss_func_mse(outputs, imgs[:,12:]))
-          fea_loss_v = fea_loss_v.mean()
-          dis_loss_v = dis_loss_v.mean()
+            loss_pixel_v = torch.mean(loss_func_mse(outputs, imgs[:,12:]))
+            fea_loss_v = fea_loss_v.mean()
+            dis_loss_v = dis_loss_v.mean()
 
-          loss_pix_v.update(args.loss_fra_reconstruct*loss_pixel_v.item(),  1)
-          loss_fea_v.update(args.loss_fea_reconstruct*fea_loss_v.item(),  1)
-          loss_dis_v.update(args.loss_distinguish*dis_loss_v.item(),  1)
+            loss_pix_v.update(args.loss_fra_reconstruct*loss_pixel_v.item(),  1)
+            loss_fea_v.update(args.loss_fea_reconstruct*fea_loss_v.item(),  1)
+            loss_dis_v.update(args.loss_distinguish*dis_loss_v.item(),  1)
     
-    print('----------------------------------------')
-    print('Epoch:', epoch+1)
-    print('PRe: {:.6f}({:.6f})'.format(loss_pixel_v.item(), loss_pix_v.avg))
-    writer.add_scalar("Loss/Frame-Reconstruction_V", loss_pix_v.avg , epoch + 1)
-    print('FRe: {:.6f}({:.6f})'.format(fea_loss_v.item(), loss_fea_v.avg))
-    writer.add_scalar("Loss/Feature-Reconstruction_V", loss_fea_v.avg, epoch + 1)
-    print('Dist: {:.6f}({:.6f})'.format(dis_loss_v.item(), loss_dis_v.avg))
-    writer.add_scalar("Loss/Distinction_V", loss_dis_v.avg , epoch + 1)
-    print('----------------------------------------')   
+      print('----------------------------------------')
+      print('Epoch:', epoch+1)
+      print('PRe: {:.6f}({:.6f})'.format(loss_pixel_v.item(), loss_pix_v.avg))
+      print('FRe: {:.6f}({:.6f})'.format(fea_loss_v.item(), loss_fea_v.avg))
+      print('Dist: {:.6f}({:.6f})'.format(dis_loss_v.item(), loss_dis_v.avg))
+      print('----------------------------------------')   
     
     wandb.define_metric("epoch")
     wandb.define_metric("Loss/*", step_metric="epoch")
     wandb.log({"Loss/Distinction": loss_dis.avg , "epoch": epoch + 1})
     wandb.log({"Loss/Feature-Reconstruction": loss_fea.avg, "epoch": epoch + 1})
     wandb.log({"Loss/Frame-Reconstruction": loss_pix.avg, "epoch": epoch +1})
-    wandb.log({"Loss/Distinction_V": loss_dis_v.avg, "epoch": epoch +1})
-    wandb.log({"Loss/Feature-Reconstruction_V": loss_fea_v.avg, "epoch": epoch +1})
-    wandb.log({"Loss/Frame-Reconstruction_V": loss_pix_v.avg, "epoch": epoch +1})
-   
-    
     loss_pix.reset()
     loss_fea.reset()
     loss_dis.reset()
-    loss_pix_v.reset()
-    loss_fea_v.reset()
-    loss_dis_v.reset()
     
+    if args.val is True: 
+      
+      wandb.log({"Loss/Distinction_V": loss_dis_v.avg, "epoch": epoch +1})
+      wandb.log({"Loss/Feature-Reconstruction_V": loss_fea_v.avg, "epoch": epoch +1})
+      wandb.log({"Loss/Frame-Reconstruction_V": loss_pix_v.avg, "epoch": epoch +1})
+      loss_pix_v.reset()
+      loss_fea_v.reset()
+      loss_dis_v.reset()
+   
     
-        
-    
-    
+  
     
     # Save the model
     if epoch%10==0:
@@ -286,9 +246,6 @@ state = {
 torch.save(state, os.path.join(log_dir, 'model_'+str(epoch)+'.pth'))
 
 if not args.debug:
-  # sys.stdout = orig_stdout
   f.close()
 
 wandb.finish()
-writer.flush()
-writer.close()

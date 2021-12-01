@@ -46,13 +46,12 @@ class DataLoader(data.Dataset):
         self._num_pred = num_pred
         self.setup()
         self.samples = self.get_all_samples()
-        # import pdb;pdb.set_trace()
 
     def setup(self):
         videos = glob.glob(os.path.join(self.dir, "*"))
         for video in sorted(videos):
-            # if 'ped2' in self.dir and '12' not in video:
-            #     continue
+            
+            
             video_name = video.split("/")[-1]
             self.videos[video_name] = {}
             self.videos[video_name]["path"] = video
@@ -60,15 +59,18 @@ class DataLoader(data.Dataset):
             self.videos[video_name]["frame"].sort()
             self.videos[video_name]["length"] = len(self.videos[video_name]["frame"])
             self.videos[video_name]["min_frame"] = int(self.videos[video_name]["frame"][0].split("/")[-1].split(".")[-2])
-
+        
+            
+            
+            
+            
     def get_all_samples(self):
         frames = []
         videos = glob.glob(os.path.join(self.dir, "*"))
         print(os.path.join(self.dir, "*"))
         # videos = [videos[0]]
         for video in sorted(videos):
-            # if 'ped2' in self.dir and '12' not in video:
-            #     continue
+            
             video_name = video.split("/")[-1]
             for i in range(len(self.videos[video_name]["frame"]) - self._time_step-self._num_pred):
             #for i in range(len(self.videos[video_name]["frame"]) - self._time_step):
@@ -79,7 +81,7 @@ class DataLoader(data.Dataset):
     def __getitem__(self, index):
         video_name = self.samples[index].split("/")[-2]
         frame_name = int(self.samples[index].split("/")[-1].split(".")[-2])
-
+        
         frame_name -= self.videos[video_name]["min_frame"]
 
         batch = []
@@ -91,8 +93,8 @@ class DataLoader(data.Dataset):
             )
             if self.transform is not None:
                 batch.append(self.transform(image))
-
-        return np.concatenate(batch, axis=0), self.samples[index]  #added here 2nd term 
+                
+        return np.concatenate(batch, axis=0),   self.samples[index]  
 
     def __len__(self):
         return len(self.samples)
@@ -224,7 +226,7 @@ class MetaDataLoader(data.Dataset):
         # import pdb;pdb.set_trace()
         if "UCF" in self.dir:
             videos = glob.glob(os.path.join(self.dir, "Nor*"))
-            print("HERE")
+            
             for video in sorted(videos):
                 video_name = video.split("/")[-1]
                 self.video_names.append(video_name)
