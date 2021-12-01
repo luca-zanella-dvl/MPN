@@ -89,7 +89,7 @@ def parse_opt():
 	parser.add_argument(
 		"--dataset_path", type=str, default="data/", help="directory of data"
 	)
-	parser.add_argument("--model_dir", type=str, help="directory of model")
+	parser.add_argument("--model_path", type=str, help="model path")
 	parser.add_argument(
 		"--video_file", type=str, help="filename of video"
 	)
@@ -134,20 +134,27 @@ def main(opt):
 	loss_func_mse = nn.MSELoss(reduction="none")
 
 	# Loading the trained model
-	model = torch.load(opt.model_dir)
+	model = torch.load(opt.model_path)
 	if type(model) is dict:
 		model = model["state_dict"]
 	model.cuda()
 	model.eval()
 
+	anomaly_score_total_list = []
 	psnr_list = []
 	feature_distance_list = []
 
 	buffer = deque(maxlen=opt.t_length)
 
 	vidcap = cv2.VideoCapture(opt.video_file)
+	vidlen = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
 
 	with torch.no_grad():
+		pbar = tqdm(
+			total=vidlen,
+			bar_format="{l_bar}|{bar}| {n_fmt}/{total_fmt} [{rate_fmt}{postfix}|{elapsed}<{remaining}]",
+		)
+
 		success, img = vidcap.read()
 		while success:
 			img = preprocess_image(img, resize_height=opt.h, resize_width=opt.w)
@@ -181,10 +188,18 @@ def main(opt):
 					psnr_list.append(psnr_score)
 					feature_distance_list.append(fea_score)
 
+			pbar.update(1)
 			success, img = vidcap.read()
 
-		print(psnr_list)
-		print(feature_distance_list)
+		pbar.close()
+
+	# Measuring the abnormality score and the AUC
+	template = calc(15, 2)
+	aa = filter(anomaly_score_list(psnr_list), template, 15)
+	bb = filter(anomaly_score_list(feature_distance_list), template, 15)
+	anomaly_score_total_list += score_sum(aa, bb, opt.alpha)
+	anomaly_score_total = np.asarray(anomaly_score_total_list)
+	print(f"Total AUC: {anomaly_score_total}")
 
 
 if __name__ == "__main__":
