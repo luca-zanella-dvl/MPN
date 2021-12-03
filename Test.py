@@ -32,6 +32,7 @@ import argparse
 import pdb
 import warnings
 import time
+import pickle
 warnings.filterwarnings("ignore") 
 
 parser = argparse.ArgumentParser(description="MPN")
@@ -70,7 +71,8 @@ else:
 
 torch.backends.cudnn.enabled = True # make sure to use cudnn for computational performance
 
-test_folder = args.dataset_path+args.dataset_type+"/testing/frames"
+#test_folder = args.dataset_path+args.dataset_type+"/testing/frames"
+test_folder = args.dataset_path+args.dataset_type
 
 # Loading dataset
 test_dataset = DataLoader(test_folder, transforms.Compose([
@@ -88,10 +90,16 @@ loss_func_mse = nn.MSELoss(reduction='none')
 model = convAE(args.c, args.t_length, args.psize, args.fdim[0], args.pdim[0])
 model.cuda()
 
-dataset_type = args.dataset_type if args.dataset_type != 'shanghaitech' else 'shanghai'
+#dataset_type = args.dataset_type if args.dataset_type != 'shanghaitech' else 'shanghai'
+dataset_type = 'shanghai'
 labels = np.load('./data/frame_labels_'+dataset_type+'.npy')
+
 if 'shanghaitech' in args.dataset_type or 'ped1' in args.dataset_type:
     labels = np.expand_dims(labels, 0)
+
+labels = np.expand_dims(labels, 0)
+#print(len(labels))
+print(len(test_batch))
 
 videos = OrderedDict()
 videos_list = sorted(glob.glob(os.path.join(test_folder, '*')))
@@ -129,6 +137,7 @@ for video in sorted(videos_list):
     psnr_list[video_name] = []
     feature_distance_list[video_name] = []
 
+err_dict = dict()
 
 #if not os.path.isdir(psnr_dir):
 #    os.mkdir(psnr_dir)
@@ -136,13 +145,14 @@ for video in sorted(videos_list):
 ckpt = snapshot_path
 ckpt_name = ckpt.split('_')[-1]
 ckpt_id = int(ckpt.split('/')[-1].split('_')[-1][:-4])
+
 # Loading the trained model
 model = torch.load(ckpt)
 if type(model) is dict:
     model = model['state_dict']
 model.cuda()
 model.eval()
-
+print("model loaded")
 # Setting for video anomaly detection
 forward_time = AverageMeter()
 video_num = 0
@@ -160,6 +170,7 @@ pbar = tqdm(total=len(test_batch),
             bar_format='{l_bar}|{bar}| {n_fmt}/{total_fmt} [{rate_fmt}{postfix}|{elapsed}<{remaining}]',)
 with torch.no_grad():
     for k,(imgs, frame_name) in enumerate(test_batch):
+
         hidden_state = None
         imgs = Variable(imgs).cuda()
         frame_name = frame_name[0]
@@ -182,6 +193,15 @@ with torch.no_grad():
         mse_imgs = mse_imgs.mean(-1)
         mse_feas = mse_feas.view((mse_feas.shape[0],-1))
         mse_feas = mse_feas.mean(-1)
+
+        pred_err = torch.mean(loss_func_mse((outputs[:]+1)/2, (imgs[:,-3:]+1)/2), dim=0)  #L_2
+        
+        #err_buffer.append((pred_err).cpu().detach().numpy().astype("uint8"))
+        dr = os.path.dirname(frame_name)
+        key = str(int(frame_name.split("/")[-1].split(".")[0]) + 4).zfill(6)
+        err_dict[dr + "/" + key + ".jpg"]= (pred_err).cpu().detach().numpy()
+        
+
         # import pdb;pdb.set_trace()
         vid = video_num
         vdd = video_num if args.dataset_type != 'avenue' else 0
@@ -208,9 +228,19 @@ with torch.no_grad():
         pbar.update(1)
 
 pbar.close()
+
+
 forward_time.reset()
+
+f = open("err_dict.pkl","wb")
+pickle.dump(err_dict,f)
+f.close()
+
+
+
 # Measuring the abnormality score and the AUC
 for video in sorted(videos_list):
+    
     video_name = video.split('/')[-1]
     template = calc(15, 2)
     aa = filter(anomaly_score_list(psnr_list[video_name]), template, 15)
@@ -218,10 +248,32 @@ for video in sorted(videos_list):
     anomaly_score_total_list += score_sum(aa, bb, args.alpha)
 
 anomaly_score_total = np.asarray(anomaly_score_total_list)
-accuracy_total = 100*AUC(anomaly_score_total, np.expand_dims(1-labels_list, 0))
+#accuracy_total = 100*AUC(anomaly_score_total, np.expand_dims(1-labels_list, 0))
 
-print('The result of Version {0} Epoch {1} on {2}'.format(psnr_dir.split('/')[-1], ckpt_name, args.dataset_type))
-print('Total AUC: {:.4f}%'.format(accuracy_total))
+#print('The result of Version {0} Epoch {1} on {2}'.format(psnr_dir.split('/')[-1], ckpt_name, args.dataset_type))
+#print('Total AUC: {:.4f}%'.format(accuracy_total))
 
 
 
+output_dir = os.path.join("exp", args.dataset_type, "demo")
+
+
+pbar = tqdm(
+    total=len(test_batch),
+    bar_format="{l_bar}|{bar}| {n_fmt}/{total_fmt} [{rate_fmt}{postfix}|{elapsed}<{remaining}]",
+)
+for i, (imgs, frame_name ) in enumerate(test_batch):
+    imgs = Variable(imgs).cuda()
+    frame_name = frame_name[0]
+    output_dir = os.path.join("exp", args.dataset_type,  "Demo", frame_name.split("/")[-2])
+
+    if i - (args.t_length - 1) >= 0:
+        visualize_frame_with_text(
+            frame_name, anomaly_score_total[i - (args.t_length - 1)], output_dir
+        )
+    else:
+        visualize_frame_with_text(frame_name, -1, output_dir)
+
+    pbar.update(1)
+
+pbar.close()

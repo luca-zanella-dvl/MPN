@@ -245,12 +245,12 @@ def visualize_frame_with_text(f_name, score, output_dir="output"):
 
     if score >= 0:
         font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.5
+        font_scale = 3
         threshold = 0.5
         bgr_red = (0, 0, 255)
         bgr_green = (0, 255, 0)
         # font_color = bgr_red if score > threshold else bgr_green
-        line_type = 2
+        line_type = 5
 
         ano_description = "Anomaly" if score < threshold else "Normal"
         font_color = bgr_red if ano_description == "Anomaly" else bgr_green

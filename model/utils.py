@@ -49,6 +49,7 @@ class DataLoader(data.Dataset):
 
     def setup(self):
         videos = glob.glob(os.path.join(self.dir, "*"))
+        
         for video in sorted(videos):
             
             
@@ -67,7 +68,7 @@ class DataLoader(data.Dataset):
     def get_all_samples(self):
         frames = []
         videos = glob.glob(os.path.join(self.dir, "*"))
-        print(os.path.join(self.dir, "*"))
+        
         # videos = [videos[0]]
         for video in sorted(videos):
             
