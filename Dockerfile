@@ -4,7 +4,7 @@
 FROM nvcr.io/nvidia/pytorch:21.05-py3
 
 # Install linux packages
-RUN apt update && apt install -y tzdata ffmpeg libsm6 libxext6
+RUN apt update && DEBIAN_FRONTEND=noninteractive apt install -y tzdata ffmpeg libsm6 libxext6
 
 # Install python dependencies
 COPY requirements.txt .
@@ -27,4 +27,4 @@ ENV HOME=/usr/src/app
 # Usage Examples -------------------------------------------------------------------------------------------------------
 
 # Build and Run
-docker build -t dvl-mpn-lzanella:devel . && docker run --gpus '"device=4,5"' --rm -it -v "$(pwd)":/usr/src/app -v /raid/home/dvl/datasets:/usr/src/datasets dvl-mpn-lzanella:devel ./scripts/train.sh
+# docker build -t dvl-mpn-lzanella:devel . && docker run --gpus '"device=4,5"' --rm -it -v "$(pwd)":/usr/src/app -v /raid/home/dvl/datasets:/usr/src/datasets dvl-mpn-lzanella:devel ./scripts/train.sh
