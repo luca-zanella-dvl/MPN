@@ -44,7 +44,7 @@ parser.add_argument('--dataset_path', type=str, default='.data/', help='director
 parser.add_argument('--exp_dir', type=str, default='log', help='directory of log')
 parser.add_argument('--resume', type=str, default='exp/ped2/example.pth', help='file path of resume pth')
 parser.add_argument('--debug', type=bool, default=False, help='if debug')
-parser.add_argument('--val', type=bool, default=False, help='if val')
+parser.add_argument('--val', action='store_true', help='if val')
 args = parser.parse_args()
 
 torch.manual_seed(2020)
