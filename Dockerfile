@@ -23,3 +23,8 @@ WORKDIR /usr/src/app
 
 # Set environment variables
 ENV HOME=/usr/src/app
+
+# Usage Examples -------------------------------------------------------------------------------------------------------
+
+# Build and Run
+docker build -t dvl-mpn-lzanella:devel . && docker run --gpus '"device=4,5"' --rm -it -v "$(pwd)":/usr/src/app -v /raid/home/dvl/datasets:/usr/src/datasets dvl-mpn-lzanella:devel ./scripts/train.sh
