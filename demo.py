@@ -98,7 +98,7 @@ torch.backends.cudnn.enabled = (
     True  # make sure to use cudnn for computational performance
 )
 
-test_folder = os.path.join(args.dataset_path, "validation/frames", args.dataset_type)
+test_folder = os.path.join(args.dataset_path, "val/frames", args.dataset_type)
 
 # Loading dataset
 test_dataset = CustomDataset(

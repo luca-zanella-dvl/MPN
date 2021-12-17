@@ -60,7 +60,7 @@ torch.backends.cudnn.enabled = True # make sure to use cudnn for computational p
 
 
 # Loading dataset
-train_folder = os.path.join(args.dataset_path, args.dataset_type, "training/frames")
+train_folder = os.path.join(args.dataset_path, args.dataset_type, "train/frames")
 train_dataset = DataLoader(train_folder, transforms.Compose([
             transforms.ToTensor(),           
             ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1)
@@ -68,7 +68,7 @@ train_batch = data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle
 train_size = len(train_dataset)
 
 if args.val is True: 
-  val_folder = os.path.join(args.dataset_path, args.dataset_type, "validation/frames")
+  val_folder = os.path.join(args.dataset_path, args.dataset_type, "val/frames")
   val_dataset = DataLoader(val_folder, transforms.Compose([
               transforms.ToTensor(),           
               ]), resize_height=args.h, resize_width=args.w, time_step=args.t_length-1)

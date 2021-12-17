@@ -71,7 +71,7 @@ else:
 
 torch.backends.cudnn.enabled = True # make sure to use cudnn for computational performance
 
-#test_folder = args.dataset_path+args.dataset_type+"/testing/frames"
+#test_folder = args.dataset_path+args.dataset_type+"/test/frames"
 test_folder = args.dataset_path+args.dataset_type
 
 # Loading dataset
