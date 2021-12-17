@@ -167,4 +167,5 @@ Thumbs.db
 
 .vscode/
 exp/
-bash/
+scripts/
+wandb/
