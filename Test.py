@@ -53,7 +53,7 @@ parser.add_argument('--th', type=float, default=0.01, help='threshold for test u
 parser.add_argument('--num_workers_test', type=int, default=8, help='number of workers for the test loader')
 parser.add_argument('--dataset_type', type=str, default='ped2', help='type of dataset: ped2, avenue, shanghai')
 parser.add_argument('--dataset_path', type=str, default='data/', help='directory of data')
-parser.add_argument('--model_dir', type=str, help='directory of model')
+parser.add_argument('--model_path', type=str, help='path to pre-trained model')
 
 args = parser.parse_args()
 
@@ -71,8 +71,8 @@ else:
 
 torch.backends.cudnn.enabled = True # make sure to use cudnn for computational performance
 
-#test_folder = args.dataset_path+args.dataset_type+"/test/frames"
-test_folder = args.dataset_path+args.dataset_type
+test_folder = args.dataset_path+args.dataset_type+"/test/frames"
+# test_folder = args.dataset_path+args.dataset_type
 
 # Loading dataset
 test_dataset = DataLoader(test_folder, transforms.Compose([
@@ -90,14 +90,14 @@ loss_func_mse = nn.MSELoss(reduction='none')
 model = convAE(args.c, args.t_length, args.psize, args.fdim[0], args.pdim[0])
 model.cuda()
 
-#dataset_type = args.dataset_type if args.dataset_type != 'shanghaitech' else 'shanghai'
-dataset_type = 'shanghai'
-labels = np.load('./data/frame_labels_'+dataset_type+'.npy')
+dataset_type = args.dataset_type if args.dataset_type != 'shanghaitech' else 'shanghai'
+# dataset_type = 'shanghai'
+# labels = np.load('./data/frame_labels_'+dataset_type+'.npy')
 
-if 'shanghaitech' in args.dataset_type or 'ped1' in args.dataset_type:
-    labels = np.expand_dims(labels, 0)
+# if 'shanghaitech' in args.dataset_type or 'ped1' in args.dataset_type:
+#     labels = np.expand_dims(labels, 0)
 
-labels = np.expand_dims(labels, 0)
+# labels = np.expand_dims(labels, 0)
 #print(len(labels))
 print(len(test_batch))
 
@@ -111,6 +111,7 @@ for video in videos_list:
     videos[video_name]['frame'] = glob.glob(os.path.join(video, '*.jpg'))
     videos[video_name]['frame'].sort()
     videos[video_name]['length'] = len(videos[video_name]['frame'])
+    videos[video_name]["min_frame"] = int(videos[video_name]["frame"][0].split("/")[-1].split(".")[-2])
 
 labels_list = []
 anomaly_score_total_list = []
@@ -120,32 +121,31 @@ label_length = 0
 psnr_list = {}
 feature_distance_list = {}
 
-print('Evaluation of Version {0} on {1}'.format(args.model_dir.split('/')[-1], args.dataset_type))
-# if 'ucf' in args.model_dir:
-#     snapshot_dir = args.model_dir.replace(args.dataset_type,'UCF')
+print('Evaluation of Version {0} on {1}'.format(args.model_path.split('/')[-1], args.dataset_type))
+# if 'ucf' in args.model_path:
+#     snapshot_dir = args.model_path.replace(args.dataset_type,'UCF')
 # else:
-#     snapshot_dir = args.model_dir.replace(args.dataset_type,'SHTech')
-snapshot_path = args.model_dir
-psnr_dir = args.model_dir.replace('exp','results')
+#     snapshot_dir = args.model_path.replace(args.dataset_type,'SHTech')
+snapshot_path = args.model_path
+psnr_dir = args.model_path.replace('exp','results')
 
 # Setting for video anomaly detection
 for video in sorted(videos_list):
     video_name = video.split('/')[-1]
-    videos[video_name]['labels'] = labels[0][4+label_length:videos[video_name]['length']+label_length]
-    labels_list = np.append(labels_list, labels[0][args.t_length+args.K_hots-1+label_length:videos[video_name]['length']+label_length])
+    # videos[video_name]['labels'] = labels[0][4+label_length:videos[video_name]['length']+label_length]
+    # labels_list = np.append(labels_list, labels[0][args.t_length+args.K_hots-1+label_length:videos[video_name]['length']+label_length])
     label_length += videos[video_name]['length']
     psnr_list[video_name] = []
     feature_distance_list[video_name] = []
 
 err_dict = dict()
 
-#if not os.path.isdir(psnr_dir):
-#    os.mkdir(psnr_dir)
+# #if not os.path.isdir(psnr_dir):
+# #    os.mkdir(psnr_dir)
 
 ckpt = snapshot_path
 ckpt_name = ckpt.split('_')[-1]
 ckpt_id = int(ckpt.split('/')[-1].split('_')[-1][:-4])
-
 # Loading the trained model
 model = torch.load(ckpt)
 if type(model) is dict:
@@ -153,6 +153,7 @@ if type(model) is dict:
 model.cuda()
 model.eval()
 print("model loaded")
+
 # Setting for video anomaly detection
 forward_time = AverageMeter()
 video_num = 0
@@ -169,11 +170,10 @@ for video in sorted(videos_list):
 pbar = tqdm(total=len(test_batch),
             bar_format='{l_bar}|{bar}| {n_fmt}/{total_fmt} [{rate_fmt}{postfix}|{elapsed}<{remaining}]',)
 with torch.no_grad():
-    for k,(imgs, frame_name) in enumerate(test_batch):
+    for k,(imgs, frame_names) in enumerate(test_batch):
 
         hidden_state = None
         imgs = Variable(imgs).cuda()
-        frame_name = frame_name[0]
 
         start_t = time.time()
         #outputs, feas, _, _, _, fea_loss = model.forward(imgs[:,:3*4], update_weights, False)
@@ -194,14 +194,14 @@ with torch.no_grad():
         mse_feas = mse_feas.view((mse_feas.shape[0],-1))
         mse_feas = mse_feas.mean(-1)
 
-        pred_err = torch.mean(loss_func_mse((outputs[:]+1)/2, (imgs[:,-3:]+1)/2), dim=0)  #L_2
+        pred_err = torch.mean(loss_func_mse((outputs[:]+1)/2, (imgs[:,-3:]+1)/2), dim=1)  #L_2
         
         #err_buffer.append((pred_err).cpu().detach().numpy().astype("uint8"))
-        dr = os.path.dirname(frame_name)
-        key = str(int(frame_name.split("/")[-1].split(".")[0]) + 4).zfill(6)
-        err_dict[dr + "/" + key + ".jpg"]= (pred_err).cpu().detach().numpy()
-        
-
+        for i in range(len(frame_names)):
+            dr = os.path.dirname(frame_names[i])
+            key = str(int(frame_names[i].split("/")[-1].split(".")[0]) + args.t_length).zfill(6)
+            err_dict[dr + "/" + key + ".jpg"]= (pred_err[i]).cpu().detach().numpy()
+            
         # import pdb;pdb.set_trace()
         vid = video_num
         vdd = video_num if args.dataset_type != 'avenue' else 0
@@ -229,14 +229,10 @@ with torch.no_grad():
 
 pbar.close()
 
-
 forward_time.reset()
 
-f = open("err_dict.pkl","wb")
-pickle.dump(err_dict,f)
-f.close()
-
-
+with open("err_dict.pkl","wb") as f:
+    pickle.dump(err_dict, f) 
 
 # Measuring the abnormality score and the AUC
 for video in sorted(videos_list):
@@ -253,26 +249,27 @@ anomaly_score_total = np.asarray(anomaly_score_total_list)
 #print('The result of Version {0} Epoch {1} on {2}'.format(psnr_dir.split('/')[-1], ckpt_name, args.dataset_type))
 #print('Total AUC: {:.4f}%'.format(accuracy_total))
 
-
-
-output_dir = os.path.join("exp", args.dataset_type, "demo")
-
+demo_dir = os.path.join("exp", args.dataset_type, "demo")
+if not os.path.isdir(demo_dir):
+    os.mkdir(demo_dir)
 
 pbar = tqdm(
     total=len(test_batch),
     bar_format="{l_bar}|{bar}| {n_fmt}/{total_fmt} [{rate_fmt}{postfix}|{elapsed}<{remaining}]",
 )
-for i, (imgs, frame_name ) in enumerate(test_batch):
-    imgs = Variable(imgs).cuda()
-    frame_name = frame_name[0]
-    output_dir = os.path.join("exp", args.dataset_type,  "Demo", frame_name.split("/")[-2])
+for k, (imgs, frame_names) in enumerate(test_batch):
+    for frame_name in frame_names:
+        video_name = frame_name.split("/")[-2]
+        frame_n = int(frame_name.split("/")[-1].split(".")[-2])
+        frame_idx = frame_n - videos[video_name]["min_frame"]
+        demo_file = os.path.join(demo_dir, video_name)
 
-    if i - (args.t_length - 1) >= 0:
-        visualize_frame_with_text(
-            frame_name, anomaly_score_total[i - (args.t_length - 1)], output_dir
-        )
-    else:
-        visualize_frame_with_text(frame_name, -1, output_dir)
+        if frame_idx - (args.t_length) >= 0:
+            visualize_frame_with_text(
+                frame_name, anomaly_score_total[frame_idx - args.t_length], demo_file
+            )
+        else:
+            visualize_frame_with_text(frame_name, -1, demo_file)
 
     pbar.update(1)
 
