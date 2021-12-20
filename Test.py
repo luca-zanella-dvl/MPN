@@ -264,9 +264,9 @@ for k, (imgs, frame_names) in enumerate(test_batch):
         frame_idx = frame_n - videos[video_name]["min_frame"]
         demo_file = os.path.join(demo_dir, video_name)
 
-        if frame_idx - (args.t_length) >= 0:
+        if frame_idx - (args.t_length - 1) >= 0:
             visualize_frame_with_text(
-                frame_name, anomaly_score_total[frame_idx - args.t_length], demo_file
+                frame_name, anomaly_score_total[frame_idx - args.t_length - 1], demo_file
             )
         else:
             visualize_frame_with_text(frame_name, -1, demo_file)
