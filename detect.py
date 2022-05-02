@@ -149,14 +149,19 @@ def main(opt):
 	vidcap = cv2.VideoCapture(opt.video_file)
 	vidlen = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
 
+	pred_err_buffer = []
+	norm_err_buffer = []
+
 	with torch.no_grad():
 		pbar = tqdm(
 			total=vidlen,
 			bar_format="{l_bar}|{bar}| {n_fmt}/{total_fmt} [{rate_fmt}{postfix}|{elapsed}<{remaining}]",
 		)
 
-		success, img = vidcap.read()
+		frame_idx = 0
+		success, im0 = vidcap.read()
 		while success:
+			img = im0.copy()
 			img = preprocess_image(img, resize_height=opt.h, resize_width=opt.w)
 			
 			buffer.append(img)
@@ -175,8 +180,14 @@ def main(opt):
 				mse_imgs = loss_func_mse((outputs[:] + 1) / 2, (imgs[:, -3:] + 1) / 2)
 
 				mse_feas = fea_loss.mean(-1)
+				# dismap(mse_imgs, frame_idx, name='pred')
+				# visualize_pred_err(im0, frame_idx, mse_imgs.squeeze(dim=0), 256, 256)
+				pred_err_buffer.append(mse_imgs.squeeze(dim=0))
 
 				mse_feas = mse_feas.reshape((-1, 1, 256, 256))
+				# dismap(mse_feas, frame_idx, name='recon')
+				# visualize_recon_err(im0, frame_idx, mse_feas.squeeze(dim=0), 256, 256)
+				norm_err_buffer.append(mse_feas.squeeze(dim=0))
 				mse_imgs = mse_imgs.view((mse_imgs.shape[0], -1))
 				mse_imgs = mse_imgs.mean(-1)
 				mse_feas = mse_feas.view((mse_feas.shape[0], -1))
@@ -187,11 +198,18 @@ def main(opt):
 					fea_score = psnr(mse_feas[j].item())
 					psnr_list.append(psnr_score)
 					feature_distance_list.append(fea_score)
+			else:
+				pred_err_buffer.append(torch.zeros(img.shape[1:]))
+				norm_err_buffer.append(torch.zeros(img.shape[1:]))
 
 			pbar.update(1)
-			success, img = vidcap.read()
+			success, im0 = vidcap.read()
+			frame_idx += 1
 
 		pbar.close()
+
+		visualize_pred_err_vid(opt.video_file, pred_err_buffer, 256, 256)
+		visualize_recon_err_vid(opt.video_file, norm_err_buffer, 256, 256)
 
 	# Measuring the abnormality score and the AUC
 	template = calc(15, 2)
