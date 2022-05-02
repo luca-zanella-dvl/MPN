@@ -90,8 +90,8 @@ loss_func_mse = nn.MSELoss(reduction='none')
 model = convAE(args.c, args.t_length, args.psize, args.fdim[0], args.pdim[0])
 model.cuda()
 
-dataset_type = args.dataset_type if args.dataset_type != 'shanghaitech' else 'shanghai'
-# dataset_type = 'shanghai'
+dataset_type = args.dataset_type
+# dataset_type = args.dataset_type if args.dataset_type != 'shanghaitech' else 'shanghai'
 # labels = np.load('./data/frame_labels_'+dataset_type+'.npy')
 
 # if 'shanghaitech' in args.dataset_type or 'ped1' in args.dataset_type:
