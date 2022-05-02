@@ -249,7 +249,8 @@ anomaly_score_total = np.asarray(anomaly_score_total_list)
 #print('The result of Version {0} Epoch {1} on {2}'.format(psnr_dir.split('/')[-1], ckpt_name, args.dataset_type))
 #print('Total AUC: {:.4f}%'.format(accuracy_total))
 
-demo_dir = os.path.join("exp", args.dataset_type, "demo")
+exp_name = os.path.basename(os.path.dirname(args.model_path)).replace('log_', '')
+demo_dir = os.path.join("exp", args.dataset_type, "demo_" + exp_name)
 if not os.path.isdir(demo_dir):
     os.mkdir(demo_dir)
 
