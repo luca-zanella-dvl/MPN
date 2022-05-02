@@ -237,12 +237,10 @@ def visualize_frame_with_text(f_name, score, output_dir="output"):
     filename, file_extension = os.path.splitext(f_name)
     #f_idx = int(filename.split("/")[-1]) 
     f_idx= int(f_name.split("/")[-1].split(".")[-2])
-    
+    frame = cv2.imread(f_name)
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     output_path = os.path.join(output_dir, f"{f_idx:06}{file_extension}")
-
-    frame = cv2.imread(f_name)
 
     if score >= 0:
         font = cv2.FONT_HERSHEY_SIMPLEX
@@ -287,6 +285,55 @@ def visualize_frame_with_text(f_name, score, output_dir="output"):
     # cv2.imshow("frame", frame)
     cv2.imwrite(output_path, frame)
     cv2.waitKey(0)
+
+
+def visualize_frame_with_text_vid(vid_file, anomaly_score_total, t_length, output_dir="results/vid"):
+    vidcap = cv2.VideoCapture(vid_file)
+    width = int(vidcap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(vidcap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = vidcap.get(cv2.CAP_PROP_FPS)
+
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    output_path = os.path.join(output_dir, 'anomaly_vid.mp4')
+    out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
+    
+    f_idx = 0
+    success, frame = vidcap.read()
+    while success:
+        if f_idx >= t_length - 1:
+            anomaly_score = anomaly_score_total[f_idx - (t_length - 1)]
+        else:
+            anomaly_score = -1
+            
+        if anomaly_score >= 0:
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 1
+            anomaly_thres = 0.5
+            # font_color = bgr_red if score > threshold else bgr_green
+            thickness=2
+            
+            text_scale = max(font_scale, frame.shape[1] / 1600.0)
+            top_left_corner_of_text = (0, int(30 * text_scale))
+
+            anomaly_text = "Anomalous" if anomaly_score < anomaly_thres else "Normal"
+            color = (0, 0, 255) if anomaly_text == "Anomalous" else (0, 255, 0)
+
+            cv2.putText(
+                frame,
+                f"frame: {f_idx} event: {anomaly_text} score: {anomaly_score:.2f}",
+                top_left_corner_of_text,
+                font,
+                text_scale,
+                color,
+                thickness=thickness,
+            )
+
+        out.write(frame)
+        success, frame = vidcap.read()
+        f_idx += 1
+    
+    cv2.destroyAllWindows()
+    vidcap.release()
 
 
 # def visualize_pred_err(f_name, pred_err, resize_width, resize_height, output_dir="output"):

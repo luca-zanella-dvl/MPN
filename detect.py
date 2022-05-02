@@ -1,3 +1,4 @@
+from black import out
 import numpy as np
 import os
 import sys
@@ -149,6 +150,9 @@ def main(opt):
 	vidcap = cv2.VideoCapture(opt.video_file)
 	vidlen = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
 
+	basename = os.path.basename(opt.video_file)
+	basename, ext = os.path.splitext(basename)
+
 	pred_err_buffer = []
 	norm_err_buffer = []
 
@@ -208,8 +212,8 @@ def main(opt):
 
 		pbar.close()
 
-		visualize_pred_err_vid(opt.video_file, pred_err_buffer, 256, 256)
-		visualize_recon_err_vid(opt.video_file, norm_err_buffer, 256, 256)
+		visualize_pred_err_vid(opt.video_file, pred_err_buffer, opt.w, opt.h, f"results/{basename}/vid/pred")
+		visualize_recon_err_vid(opt.video_file, norm_err_buffer, opt.w, opt.h, f"results/{basename}/vid/recon")
 
 	# Measuring the abnormality score and the AUC
 	template = calc(15, 2)
@@ -218,6 +222,8 @@ def main(opt):
 	anomaly_score_total_list += score_sum(aa, bb, opt.alpha)
 	anomaly_score_total = np.asarray(anomaly_score_total_list)
 	print(f"Total AUC: {anomaly_score_total}")
+
+	visualize_frame_with_text_vid(opt.video_file, anomaly_score_total, opt.t_length, output_dir=f"results/{basename}/vid")
 
 
 if __name__ == "__main__":
