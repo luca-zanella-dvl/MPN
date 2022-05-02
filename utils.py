@@ -1,3 +1,4 @@
+import operator
 from pathlib import Path
 import numpy as np
 import os
@@ -54,7 +55,7 @@ def get_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
 
-def dismap(x, name='dismap'):
+def dismap(x, frame_idx, name='dismap'):
     # import pdb;pdb.set_trace()
     x = x.data.cpu().numpy()
     x = x.mean(1)
@@ -64,7 +65,7 @@ def dismap(x, name='dismap'):
         # import pdb;pdb.set_trace()
         df = pd.DataFrame(y)
         sns.heatmap(df)
-        plt.savefig('results/dismap/{}_{}.png'.format(name,str(j)))
+        plt.savefig('results/dismap/{}_{}.png'.format(name,str(frame_idx + j)))
         plt.close()
     return True
 
@@ -288,26 +289,106 @@ def visualize_frame_with_text(f_name, score, output_dir="output"):
     cv2.waitKey(0)
 
 
-def visualize_pred_err(f_name, pred_err, resize_width, resize_height, output_dir="output"):
-    filename, file_extension = os.path.splitext(f_name)
-    #f_idx = int(filename.split("/")[-1])
-    f_idx = int(f_name.split("/")[-1].split(".")[-2])
-    
-    
+# def visualize_pred_err(f_name, pred_err, resize_width, resize_height, output_dir="output"):
+#     filename, file_extension = os.path.splitext(f_name)
+#     #f_idx = int(filename.split("/")[-1])
+#     f_idx = int(f_name.split("/")[-1].split(".")[-2])
+#     Path(output_dir).mkdir(parents=True, exist_ok=True)
+#     output_path = os.path.join(output_dir, f"{f_idx:06}{file_extension}")
+#     img = cv2.imread(f_name)
+#     img_resized = cv2.resize(img, (resize_width, resize_height))
+#     heatmap_img = cv2.applyColorMap(pred_err, cv2.COLORMAP_JET)
+#     fin = cv2.addWeighted(heatmap_img, 0.7, img_resized, 0.3, 0)
+#     # Display the image
+#     #cv2.imshow("frame", fin)
+#     cv2.imwrite(output_path, fin)
+#     cv2.waitKey(0)
 
+
+def visualize_pred_err(im0, f_idx, pred_err, resize_width, resize_height, output_dir="results/pred"):
+    pred_err = pred_err.data.cpu().numpy()
+    pred_err = pred_err.mean(0)
+    pred_err *= 255.0/pred_err.max()
+    pred_err = pred_err.astype(np.uint8)
+    pred_err = np.expand_dims(pred_err, axis=0)
+    pred_err = np.transpose(pred_err, (1, 2, 0))
     Path(output_dir).mkdir(parents=True, exist_ok=True)
-    output_path = os.path.join(output_dir, f"{f_idx:06}{file_extension}")
-
-    img = cv2.imread(f_name)
-    img_resized = cv2.resize(img, (resize_width, resize_height))
-    
-
+    output_path = os.path.join(output_dir, f"{f_idx:06}.png")
+    img_resized = cv2.resize(im0, (resize_width, resize_height))
     heatmap_img = cv2.applyColorMap(pred_err, cv2.COLORMAP_JET)
-    
-    
     fin = cv2.addWeighted(heatmap_img, 0.7, img_resized, 0.3, 0)
-   
     # Display the image
     #cv2.imshow("frame", fin)
     cv2.imwrite(output_path, fin)
-    cv2.waitKey(0)
+    # cv2.waitKey(0)
+
+def visualize_recon_err(im0, f_idx, recon_err, resize_width, resize_height, output_dir="results/recon"):
+    recon_err = recon_err.data.cpu().numpy()
+    recon_err = recon_err.mean(0)
+    recon_err *= 255.0/recon_err.max()
+    recon_err = recon_err.astype(np.uint8)
+    recon_err = np.expand_dims(recon_err, axis=0)
+    recon_err = np.transpose(recon_err, (1, 2, 0))
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    output_path = os.path.join(output_dir, f"{f_idx:06}.png")
+    img_resized = cv2.resize(im0, (resize_width, resize_height))
+    heatmap_img = cv2.applyColorMap(recon_err, cv2.COLORMAP_JET)
+    fin = cv2.addWeighted(heatmap_img, 0.7, img_resized, 0.3, 0)
+    # Display the image
+    #cv2.imshow("frame", fin)
+    cv2.imwrite(output_path, fin)
+    # cv2.waitKey(0)
+
+def visualize_pred_err_vid(vid_file, pred_err_buffer, resize_width, resize_height, output_dir="results/vid/pred"):
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    output_path = os.path.join(output_dir, 'pred_err_vid.mp4')
+    out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), 12.5, (resize_width,resize_height))
+
+    max_val = max([pred_err.data.cpu().numpy().mean(0).max() for pred_err in pred_err_buffer])
+
+    vidcap = cv2.VideoCapture(vid_file)
+    f_idx = 0
+    success, im0 = vidcap.read()
+    while success:
+        pred_err = pred_err_buffer[f_idx].data.cpu().numpy()
+        pred_err = pred_err.mean(0)
+        pred_err *= 255.0/max_val
+        pred_err = pred_err.astype(np.uint8)
+        pred_err = np.expand_dims(pred_err, axis=0)
+        pred_err = np.transpose(pred_err, (1, 2, 0))
+        img_resized = cv2.resize(im0, (resize_width, resize_height))
+        heatmap_img = cv2.applyColorMap(pred_err, cv2.COLORMAP_JET)
+        fin = cv2.addWeighted(heatmap_img, 0.7, img_resized, 0.3, 0)
+        # Display the image
+        #cv2.imshow("frame", fin)
+        out.write(fin)
+
+        success, im0 = vidcap.read()
+        f_idx += 1
+
+def visualize_recon_err_vid(vid_file, recon_err_buffer, resize_width, resize_height, output_dir="results/vid/recon"):
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    output_path = os.path.join(output_dir, 'recon_err_vid.mp4')
+    out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), 12.5, (resize_width,resize_height))
+
+    max_val = max([pred_err.data.cpu().numpy().mean(0).max() for pred_err in recon_err_buffer])
+
+    vidcap = cv2.VideoCapture(vid_file)
+    f_idx = 0
+    success, im0 = vidcap.read()
+    while success:
+        recon_err = recon_err_buffer[f_idx].data.cpu().numpy()
+        recon_err = recon_err.mean(0)
+        recon_err *= 255.0/max_val
+        recon_err = recon_err.astype(np.uint8)
+        recon_err = np.expand_dims(recon_err, axis=0)
+        recon_err = np.transpose(recon_err, (1, 2, 0))
+        img_resized = cv2.resize(im0, (resize_width, resize_height))
+        heatmap_img = cv2.applyColorMap(recon_err, cv2.COLORMAP_JET)
+        fin = cv2.addWeighted(heatmap_img, 0.7, img_resized, 0.3, 0)
+        # Display the image
+        #cv2.imshow("frame", fin)
+        out.write(fin)
+
+        success, im0 = vidcap.read()
+        f_idx += 1
