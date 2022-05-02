@@ -84,7 +84,7 @@ class Decoder_new(torch.nn.Module):
         self.moduleUpsample2 = Upsample(128, 64)
         
     def forward(self, x, skip1, skip2, skip3):
-        
+        # 512, 64, 128, 256
         tensorConv = self.moduleConv(x)
 
         tensorUpsample4 = self.moduleUpsample4(tensorConv)
@@ -145,7 +145,9 @@ class convAE(torch.nn.Module):
 
     def forward(self, x, weights=None, train=True):
         
+        # bx512x32x32, bx64x256x256, bx128x128x128, bx256x64x64
         fea, skip1, skip2, skip3 = self.encoder(x)
+        # bx128x256x256 (torch.cat((skip1, tensorUpsample2), dim = 1))
         new_fea = self.decoder(fea, skip1, skip2, skip3)
 
         new_fea = F.normalize(new_fea, dim=1)
@@ -166,6 +168,7 @@ class convAE(torch.nn.Module):
         
         #test
         else:
+            # bx128x256x256, 1x10x128
             updated_fea, keys, query, fea_loss = self.prototype(new_fea, new_fea, weights, train)
             if weights == None:
                 output = self.ohead(updated_fea)
@@ -291,7 +294,7 @@ def test_ft(model, model_weights, model_alpha, loss_fn, img, gt, args):
 
     return update_weights
 
-def dismap(x, name='pred'):
+def dismap(x, frame_idx, name='pred'):
     
     x = x.data.cpu().numpy()
     x = x.mean(1)
@@ -300,6 +303,6 @@ def dismap(x, name='pred'):
         y = x[j]
         df = pd.DataFrame(y)
         sns.heatmap(df)
-        plt.savefig('results/dismap/{}_{}.png'.format(name,str(j)))
+        plt.savefig('results/dismap/{}_{}.png'.format(name,str(frame_idx + j)))
         plt.close()
     return True
