@@ -142,7 +142,7 @@ for epoch in range(start_epoch, args.epochs):
         fea_loss = fea_loss.mean()
         dis_loss = dis_loss.mean()
         loss_D = args.loss_fra_reconstruct*loss_pixel + args.loss_fea_reconstruct * fea_loss + args.loss_distinguish * dis_loss 
-        loss_D.backward(retain_graph=False)
+        loss_D.backward(retain_graph=True)
         optimizer_D.step()
 
 
@@ -172,7 +172,7 @@ for epoch in range(start_epoch, args.epochs):
     pbar.close()  
 
     # Validation 
-    if args.val is True: 
+    if args.val: 
       model.eval()
       with torch.no_grad():
         for k,(imgs,_) in enumerate(val_batch):
@@ -203,7 +203,7 @@ for epoch in range(start_epoch, args.epochs):
     loss_fea.reset()
     loss_dis.reset()
     
-    if args.val is True: 
+    if args.val: 
       
       wandb.log({"Loss/Distinction_V": loss_dis_v.avg, "epoch": epoch +1})
       wandb.log({"Loss/Feature-Reconstruction_V": loss_fea_v.avg, "epoch": epoch +1})
@@ -225,7 +225,7 @@ for epoch in range(start_epoch, args.epochs):
         
       state = {
             'epoch': epoch,
-            'state_dict': model_save,
+            'state_dict': model_save.state_dict(),
             'optimizer_D' : optimizer_D.state_dict(),
           }
       torch.save(state, os.path.join(log_dir, 'model_'+str(epoch)+'.pth'))
@@ -239,7 +239,7 @@ else:
   
 state = {
       'epoch': epoch,
-      'state_dict': model_save,
+      'state_dict': model_save.state_dict(),
       'optimizer_D' : optimizer_D.state_dict(),
     }
 # Save the model
